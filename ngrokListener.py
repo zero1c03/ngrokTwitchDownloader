@@ -4,7 +4,15 @@ from flask import Response
 from flask import request
 from concurrent.futures import ThreadPoolExecutor as Pool
 from queue import Queue
-import time, datetime, threading, subprocess, logging, sys, os, configparser, streamlink
+import time
+import datetime
+import threading
+import subprocess
+import logging
+import sys
+import os
+import configparser
+import streamlink
 
 app = Flask(__name__)
 inet_addr = "127.0.0.1"
@@ -14,14 +22,39 @@ Config = configparser.ConfigParser()
 setting = {}
 recording = []
 
+
 @app.route("/api/online/<string:name>", methods=['POST'])
 def postMethod(name):
-    if name not in recording:
-        thread = threading.Thread(target=startRecording, args=(name.lower(),))
-        thread.start()
-        return name + " start download"
+    try:
+        resp = request.get_json()
+    except Exception as e:
+        print(e)
+        return ''
+
+    if resp.get('challenge'):
+        print('Returning hub challenge.')
+        return resp.get('challenge')
+
+    # print some diag
+    print('==============')
+    print(request.headers)
+    print(request.data)
+    print('==============')
+
+    if(resp.get('event')):
+        print(name + ' online!')
+        if name not in recording:
+            thread = threading.Thread(
+                target=startRecording, args=(name.lower(),))
+            thread.start()
+            return name + " start download"
+        else:
+            return name + " is downloading"
     else:
-        return name + " is downloading"
+        # {"type":"live","started_at":"2021-04-11T05:58:58Z"} in event
+        print(resp.get('event'))
+        return "unknown event."
+
 
 def startRecording(name):
     try:
@@ -32,8 +65,9 @@ def startRecording(name):
         ts = time.time()
         st = datetime.datetime.fromtimestamp(ts).strftime("%Y.%m.%d_%H.%M.%S")
         file = os.path.join(setting['save_directory'], name, "{st}_{name}.mp4".format(path=setting['save_directory'], name=name,
-                                                            st=st))
-        os.makedirs(os.path.join(setting['save_directory'], name), exist_ok=True)
+                                                                                      st=st))
+        os.makedirs(os.path.join(
+            setting['save_directory'], name), exist_ok=True)
         with open(file, 'wb') as f:
             recording.append(name)
             while True:
@@ -52,7 +86,7 @@ def readConfig():
     Config.read(mainDir + "/config.conf")
     setting = {
         'save_directory': Config.get('paths', 'save_directory'),
-        }
+    }
     if not os.path.exists("{path}".format(path=setting['save_directory'])):
         os.makedirs("{path}".format(path=setting['save_directory']))
 
